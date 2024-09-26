@@ -132,6 +132,9 @@ internal fun StickerItem(
                                 stickerState.translation += (dragAmount * stickerState.scale).rotate(stickerState.rotation)
                             }
                         }
+                        .pointerInput(Unit) {
+                            detectTapGestures {  }
+                        }
                 ) {
 
                     if (stickerState.enable) {

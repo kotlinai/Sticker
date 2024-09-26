@@ -118,7 +118,7 @@ fun StickerContainer(
         modifier = modifier
             .pointerInput(Unit) {
                 detectTapGestures {
-                    //stickerContainerState.clearEditState()
+                    stickerContainerState.clearEditState()
                 }
             },
         contentAlignment = Alignment.Center
