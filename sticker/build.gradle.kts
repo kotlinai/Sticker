@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
+    id("maven-publish")
 }
 
 android {
@@ -65,4 +66,21 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("sticker") {
+
+            groupId = "com.kotlinaai.android"
+            artifactId = "sticker"
+            version = "0.1.0"
+
+            afterEvaluate { artifact(tasks.getByName("bundleReleaseAar"))}
+        }
+    }
+
+    repositories {
+        mavenLocal()
+    }
 }
