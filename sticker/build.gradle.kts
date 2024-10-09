@@ -68,6 +68,11 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 }
 
+tasks.register<Jar>("sourceJar") {
+    from(android.sourceSets["main"].java.srcDirs)
+    archiveClassifier = "sources"
+}
+
 publishing {
     publications {
         create<MavenPublication>("sticker") {
@@ -75,6 +80,8 @@ publishing {
             groupId = "com.kotlinaai.android"
             artifactId = "sticker"
             version = "0.1.2"
+
+            artifact(tasks.named("sourceJar"))
 
             afterEvaluate { artifact(tasks.getByName("bundleReleaseAar"))}
         }
@@ -84,3 +91,4 @@ publishing {
         mavenLocal()
     }
 }
+
