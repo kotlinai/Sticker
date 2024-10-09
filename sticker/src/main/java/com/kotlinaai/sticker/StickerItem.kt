@@ -1,5 +1,6 @@
 package com.kotlinaai.sticker
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -31,7 +32,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -86,8 +89,8 @@ internal fun StickerItem(
     var deleteBtnAnchor = remember {
         Offset.Unspecified
     }
-    var deleteBtnPos = remember {
-        Offset.Unspecified
+    var deleteBtnCoordinates: LayoutCoordinates? = remember {
+        null
     }
     var buttonVisible by remember {
         mutableStateOf(true)
@@ -107,7 +110,7 @@ internal fun StickerItem(
             modifier = Modifier
                 .align(Alignment.Center)
                 .onPlaced { coordinates ->
-                    imageCenter = coordinates.boundsInRoot().center
+                    imageCenter = coordinates.boundsInWindow().center
                 }
                 .graphicsLayer {
 
@@ -159,7 +162,9 @@ internal fun StickerItem(
                             .align(Alignment.BottomStart)
                             .size(1.dp)
                             .onPlaced {
-                                transformBtnAnchor = it.boundsInRoot().center
+                                transformBtnAnchor = it.boundsInWindow().center
+
+                                Log.d("Sticker", "transformBtnAnchor=$transformBtnAnchor")
                             }
                     )
                     //删除按钮锚点
@@ -168,7 +173,7 @@ internal fun StickerItem(
                             .align(Alignment.TopEnd)
                             .size(1.dp)
                             .onPlaced {
-                                deleteBtnAnchor = it.boundsInRoot().center
+                                deleteBtnAnchor = it.boundsInWindow().center
                             }
                     )
                 }
@@ -180,18 +185,24 @@ internal fun StickerItem(
                     .graphicsLayer {
                         alpha = if (buttonVisible) 1f else 0f
 
-                        if (buttonVisible && !deleteBtnPos.isUnspecified && !deleteBtnAnchor.isUnspecified) {
-                            val offset = deleteBtnAnchor - deleteBtnPos
+                        deleteBtnCoordinates?.let {
+                            if (buttonVisible && !deleteBtnAnchor.isUnspecified) {
+                                val offset = it.windowToLocal(deleteBtnAnchor) - it.boundsInParent().center
 
-                            translationX += offset.x
-                            translationY += offset.y
+                                translationX += offset.x
+                                translationY += offset.y
+                            }
                         }
                     }
-                    .onPlaced {
-                        deleteBtnPos = it.boundsInRoot().center
-                    }
             ) {
-                delete()
+                Box(
+                    modifier = Modifier
+                        .onPlaced {
+                            deleteBtnCoordinates = it
+                        }
+                ) {
+                    delete()
+                }
             }
 
             Box(
@@ -200,12 +211,13 @@ internal fun StickerItem(
                     .graphicsLayer {
                         alpha = if (buttonVisible) 1f else 0f
 
-                        if (buttonVisible && transformBtnCoordinates != null && !transformBtnAnchor.isUnspecified) {
-                            val offset =
-                                transformBtnAnchor - transformBtnCoordinates!!.boundsInRoot().center
+                        transformBtnCoordinates?.let {
+                            if (buttonVisible && !transformBtnAnchor.isUnspecified) {
+                                val offset = it.windowToLocal(transformBtnAnchor) - it.boundsInParent().center
 
-                            translationX += offset.x
-                            translationY += offset.y
+                                translationX += offset.x
+                                translationY += offset.y
+                            }
                         }
                     }
             ) {
