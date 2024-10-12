@@ -1,6 +1,7 @@
 package com.kotlinaai.sticker
 
 import android.util.Log
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -10,11 +11,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -33,15 +36,18 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.round
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.zIndex
 import com.kotlinaai.sticker.ext.angleTo
 import com.kotlinaai.sticker.ext.rotate
+import kotlinx.coroutines.flow.filter
 
 /**
  *
@@ -53,12 +59,12 @@ import com.kotlinaai.sticker.ext.rotate
  * @Description:
  */
 
-internal class StickerState {
-    var enable by mutableStateOf(false)
+internal class StickerState(initialEnable: Boolean = false, zOrder: Float = 0f) {
+    var enable by mutableStateOf(initialEnable)
     var translation by mutableStateOf(Offset.Zero)
     var scale by mutableFloatStateOf(1f)
     var rotation by mutableFloatStateOf(0f)
-    var zIndex by mutableFloatStateOf(0f)
+    var zIndex by mutableFloatStateOf(zOrder)
 }
 
 @Composable
@@ -77,48 +83,83 @@ internal fun StickerItem(
     background: @Composable () -> Unit = {},
     content: @Composable () -> Unit
 ) {
-    var imageCenter = remember {
-        Offset.Unspecified
+    var imageCoordinates: LayoutCoordinates? by remember {
+        mutableStateOf(null)
     }
-    var transformBtnCoordinates: LayoutCoordinates? = remember {
-        null
+    var transformBtnCoordinates: LayoutCoordinates? by remember {
+        mutableStateOf(null)
     }
-    var transformBtnAnchor = remember {
-        Offset.Unspecified
+    var transformBtnAnchorCoordinates: LayoutCoordinates? by remember {
+        mutableStateOf(null)
     }
-    var deleteBtnAnchor = remember {
-        Offset.Unspecified
+    var deleteAnchorCoordinate: LayoutCoordinates? by remember {
+        mutableStateOf(null)
     }
-    var deleteBtnCoordinates: LayoutCoordinates? = remember {
-        null
+    var deleteBtnCoordinates: LayoutCoordinates? by remember {
+        mutableStateOf(null)
     }
     var buttonVisible by remember {
         mutableStateOf(true)
+    }
+    var deleteBtnTranslate by remember {
+        mutableStateOf(Offset.Zero)
+    }
+    var transformBtnTranslate by remember {
+        mutableStateOf(Offset.Zero)
+    }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            Triple(buttonVisible, transformBtnAnchorCoordinates, transformBtnCoordinates)
+        }.filter { (_, anchor, button) ->
+            anchor != null && button?.isAttached == true
+        }.collect { (_, anchor, button) ->
+            val target = anchor!!.boundsInWindow().center
+            val cur = button!!.boundsInWindow().center
+
+            transformBtnTranslate += target - cur
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            Triple(buttonVisible, deleteAnchorCoordinate, deleteBtnCoordinates)
+        }.filter { (_, anchor, button) ->
+            anchor != null && button?.isAttached == true
+        }.collect { (_, anchor, button) ->
+            val target = anchor!!.boundsInWindow().center
+            val cur = button!!.boundsInWindow().center
+
+            deleteBtnTranslate += target - cur
+        }
     }
 
     Box(
         modifier = Modifier
             .zIndex(stickerState.zIndex)
-            .graphicsLayer {
-                translationX = stickerState.translation.x
-                translationY = stickerState.translation.y
-            }
             .then(modifier)
     ) {
-
         Box(
             modifier = Modifier
-                .align(Alignment.Center)
-                .onPlaced { coordinates ->
-                    imageCenter = coordinates.boundsInWindow().center
-                }
                 .graphicsLayer {
-
-                    scaleX = stickerState.scale
-                    scaleY = stickerState.scale
-                    rotationZ = stickerState.rotation
+                    translationX = stickerState.translation.x
+                    translationY = stickerState.translation.y
                 }
         ) {
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .onPlaced { coordinates ->
+                        imageCoordinates = coordinates
+                    }
+                    .graphicsLayer {
+
+                        scaleX = stickerState.scale
+                        scaleY = stickerState.scale
+                        rotationZ = stickerState.rotation
+                    }
+            ) {
                 Box(
                     modifier = Modifier
                         .pointerInput(Unit) {
@@ -148,12 +189,6 @@ internal fun StickerItem(
                     Box(
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .pointerInput(stickerState) {
-                                awaitEachGesture {
-                                    awaitFirstDown(false)
-                                    stickerState.enable = true
-                                }
-                            }
                     ) { content() }
 
                     //缩放按钮锚点
@@ -162,9 +197,7 @@ internal fun StickerItem(
                             .align(Alignment.BottomStart)
                             .size(1.dp)
                             .onPlaced {
-                                transformBtnAnchor = it.boundsInWindow().center
-
-                                Log.d("Sticker", "transformBtnAnchor=$transformBtnAnchor")
+                                transformBtnAnchorCoordinates = it
                             }
                     )
                     //删除按钮锚点
@@ -173,26 +206,23 @@ internal fun StickerItem(
                             .align(Alignment.TopEnd)
                             .size(1.dp)
                             .onPlaced {
-                                deleteBtnAnchor = it.boundsInWindow().center
+                                //val center = it.boundsInWindow().center
+                                deleteAnchorCoordinate = it
                             }
                     )
                 }
+            }
         }
+
         if (stickerState.enable) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .graphicsLayer {
                         alpha = if (buttonVisible) 1f else 0f
-
-                        deleteBtnCoordinates?.let {
-                            if (buttonVisible && !deleteBtnAnchor.isUnspecified) {
-                                val offset = it.windowToLocal(deleteBtnAnchor) - it.boundsInParent().center
-
-                                translationX += offset.x
-                                translationY += offset.y
-                            }
-                        }
+                        //Log.d("Sticker", "deleteBtnTranslate=$deleteBtnTranslate")
+                        translationX = deleteBtnTranslate.x
+                        translationY = deleteBtnTranslate.y
                     }
             ) {
                 Box(
@@ -211,14 +241,8 @@ internal fun StickerItem(
                     .graphicsLayer {
                         alpha = if (buttonVisible) 1f else 0f
 
-                        transformBtnCoordinates?.let {
-                            if (buttonVisible && !transformBtnAnchor.isUnspecified) {
-                                val offset = it.windowToLocal(transformBtnAnchor) - it.boundsInParent().center
-
-                                translationX += offset.x
-                                translationY += offset.y
-                            }
-                        }
+                        translationX = transformBtnTranslate.x
+                        translationY = transformBtnTranslate.y
                     }
             ) {
                 Box(
@@ -235,18 +259,22 @@ internal fun StickerItem(
                                 }
                             }
                         }
-                        .pointerInput(Unit) {
+                        .pointerInput(transformBtnCoordinates, imageCoordinates) {
                             detectDragGestures { change, _ ->
-                                transformBtnCoordinates?.let {
-                                    val prevVector =
-                                        it.localToRoot(change.previousPosition) - imageCenter
-                                    val curVector = it.localToRoot(change.position) - imageCenter
 
-                                    stickerState.scale =
-                                        (stickerState.scale * curVector.getDistance() / prevVector.getDistance()).coerceIn(
-                                            scaleRange
-                                        )
-                                    stickerState.rotation += prevVector.angleTo(curVector)
+                                transformBtnCoordinates?.let { transCoor ->
+                                    imageCoordinates?.boundsInWindow()?.center?.let { imageCenter ->
+
+                                        val imageCenterInLocal = transCoor.windowToLocal(imageCenter)
+                                        val prevVector = change.previousPosition - imageCenterInLocal
+                                        val curVector = change.position - imageCenterInLocal
+
+                                        stickerState.scale =
+                                            (stickerState.scale * curVector.getDistance() / prevVector.getDistance()).coerceIn(
+                                                scaleRange
+                                            )
+                                        stickerState.rotation += prevVector.angleTo(curVector)
+                                    }
                                 }
                             }
                         }
@@ -256,6 +284,8 @@ internal fun StickerItem(
             }
         }
     }
+
+
 }
 
 @Preview
@@ -265,7 +295,7 @@ private fun StickerPreview() {
     var stickers by remember {
         mutableStateOf(
             buildList {
-                add(StickerState())
+                add(StickerState(true))
                 add(StickerState())
                 add(StickerState())
                 add(StickerState())
@@ -289,65 +319,49 @@ private fun StickerPreview() {
 
         stickers.forEach {
 
-            key(it) {
-                LaunchedEffect(it) {
-                    snapshotFlow { it.enable }
-                        .collect { enable ->
-                            if (enable) {
-                                val newStickers = stickers - it
-
-                                newStickers.forEach { item -> item.enable = false }
-
-                                stickers = newStickers + it
-                            }
-                        }
-                }
-
-                StickerItem(
-                    stickerState = it,
-                    scaleAndRotate = {
-                        Spacer(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .background(
-                                    color = Color.Blue,
-                                    shape = CircleShape
-                                )
-                        )
-                    },
-                    delete = {
-                        Spacer(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .background(
-                                    color = Color.Green,
-                                    shape = CircleShape
-                                )
-                                .clickable {
-                                    stickers = stickers - it
-                                }
-                        )
-                    },
-                    background = {
-                        Spacer(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .background(
-                                    color = Color.Black.copy(alpha = 0.3f)
-                                )
-                        )
-                    }
-                ) {
+            StickerItem(
+                stickerState = it,
+                scaleAndRotate = {
                     Spacer(
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(20.dp)
                             .background(
-                                color = Color.Magenta
+                                color = Color.Blue,
+                                shape = CircleShape
+                            )
+                    )
+                },
+                delete = {
+                    Spacer(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(
+                                color = Color.Green,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                //stickers = stickers - it
+                            }
+                    )
+                },
+                background = {
+                    Spacer(
+                        modifier = Modifier
+                            .size(70.dp)
+                            .background(
+                                color = Color.Black.copy(alpha = 0.3f)
                             )
                     )
                 }
+            ) {
+                Spacer(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .background(
+                            color = Color.Magenta
+                        )
+                )
             }
-
         }
     }
 }

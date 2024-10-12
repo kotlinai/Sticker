@@ -79,7 +79,7 @@ publishing {
 
             groupId = "com.kotlinaai.android"
             artifactId = "sticker"
-            version = "0.1.2"
+            version = "0.2.0"
 
             artifact(tasks.named("sourceJar"))
 
